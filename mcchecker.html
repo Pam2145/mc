@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MC Checker Pro</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; background-color: #f0f2f5; color: #333; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 350px; margin-bottom: 20px; }
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+        .nav-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { padding: 12px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; background-color: #4a90e2; color: white; transition: 0.2s; flex: 1; }
+        button:hover { background-color: #357abd; }
+        .secondary-btn { background-color: #95a5a6; }
+        .end-btn { background-color: #e74c3c; width: 100%; margin-top: 10px; }
+        
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+        th, td { border: 1px solid #eee; padding: 8px; text-align: center; }
+        .wrong { background-color: #ffebee; color: #c62828; }
+        
+        .history-container { width: 350px; background: #fff; padding: 15px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .history-item { font-size: 14px; padding: 10px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; cursor: pointer; }
+        .history-item:hover { background-color: #f8f9fa; }
+        .history-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 4px; }
+        .history-sub { display: flex; justify-content: space-between; color: #666; font-size: 12px; }
+        .clear-history { font-size: 12px; color: #e74c3c; cursor: pointer; text-decoration: underline; background: none; border: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 id="title">Your Answers</h2>
+    <p id="counter">Question #1</p>
+    
+    <div id="input-section">
+        <div class="btn-group">
+            <button onclick="handleInput('A')">A</button>
+            <button onclick="handleInput('B')">B</button>
+            <button onclick="handleInput('C')">C</button>
+            <button onclick="handleInput('D')">D</button>
+        </div>
+        <div class="nav-group">
+            <button class="secondary-btn" onclick="goBack()">Return</button>
+            <button class="secondary-btn" onclick="handleInput('-')">Next</button>
+        </div>
+        <button id="endBtn" class="end-btn" onclick="finishStep()">Finish My Input</button>
+    </div>
+
+    <div id="results-area" style="display:none;">
+        <div id="results-summary" style="font-size: 22px; font-weight: bold; margin-bottom: 15px;"></div>
+        <table>
+            <thead><tr><th>#</th><th>Inputted</th><th>Correct</th></tr></thead>
+            <tbody id="table-body"></tbody>
+        </table>
+        <button style="background:#27ae60; margin-top:15px; width:100%;" onclick="location.reload()">New Check</button>
+    </div>
+</div>
+
+<div class="history-container">
+    <h4 style="margin:0 0 10px 0;">History (Click to view)</h4>
+    <div id="history-list"></div>
+    <button class="clear-history" onclick="clearHistory()">Clear History</button>
+</div>
+
+<script>
+    // Offline Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
+        });
+    }
+
+    let myAnswers = [];
+    let correctAnswers = [];
+    let currentIndex = 0;
+    let isInputtingMine = true;
+
+    window.onload = displayHistory;
+
+    function updateUI() {
+        const label = isInputtingMine ? "Question" : "Correct Ans for Q";
+        document.getElementById('counter').innerText = `${label} #${currentIndex + 1}`;
+    }
+
+    function handleInput(val) {
+        if (isInputtingMine) {
+            myAnswers[currentIndex] = val;
+            currentIndex++;
+        } else {
+            correctAnswers[currentIndex] = val;
+            currentIndex++;
+            if (currentIndex === myAnswers.length) return showFinalResults(myAnswers, correctAnswers, true);
+        }
+        updateUI();
+    }
+
+    function goBack() {
+        if (currentIndex > 0) { currentIndex--; updateUI(); }
+    }
+
+    function finishStep() {
+        if (myAnswers.length === 0) return alert("Enter answers first!");
+        isInputtingMine = false;
+        currentIndex = 0;
+        document.getElementById('title').innerText = "Step 2: Correct Key";
+        document.getElementById('endBtn').style.display = "none";
+        updateUI();
+    }
+
+    function showFinalResults(userArr, correctArr, shouldSave) {
+        document.getElementById('input-section').style.display = "none";
+        document.getElementById('counter').style.display = "none";
+        document.getElementById('title').innerText = "Results";
+        document.getElementById('results-area').style.display = "block";
+
+        let score = 0;
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = "";
+
+        userArr.forEach((ans, i) => {
+            const correct = correctArr[i] || "-";
+            const isMatch = (ans === correct && ans !== "-");
+            if (isMatch) score++;
+            const row = tbody.insertRow();
+            if (!isMatch) row.className = 'wrong';
+            row.innerHTML = `<td>${i+1}</td><td>${ans}</td><td>${correct}</td>`;
+        });
+
+        const total = userArr.length;
+        const percent = ((score / total) * 100).toFixed(1);
+        document.getElementById('results-summary').innerText = `${score} / ${total} (${percent}%)`;
+        
+        if (shouldSave) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const dateStr = now.toLocaleDateString();
+            
+            // Optional naming: if user cancels or leaves blank, use default
+            let recordName = prompt("Name this record (Optional):", "");
+            if (recordName === null || recordName.trim() === "") {
+                recordName = "Record " + dateStr;
+            }
+            
+            saveRecord(recordName, score, total, percent, timeStr, dateStr, userArr, correctArr);
+        }
+    }
+
+    function saveRecord(name, score, total, percent, time, date, userArr, correctArr) {
+        let history = JSON.parse(localStorage.getItem('mc_history') || "[]");
+        history.unshift({ name, score, total, percent, time, date, userArr, correctArr });
+        history = history.slice(0, 10); 
+        localStorage.setItem('mc_history', JSON.stringify(history));
+        displayHistory();
+    }
+
+    function displayHistory() {
+        const history = JSON.parse(localStorage.getItem('mc_history') || "[]");
+        const list = document.getElementById('history-list');
+        list.innerHTML = history.length ? "" : "<small>No records yet.</small>";
+        
+        history.forEach((item) => {
+            const div = document.createElement('div');
+            div.className = "history-item";
+            div.onclick = () => showFinalResults(item.userArr, item.correctArr, false);
+            div.innerHTML = `
+                <div class="history-header">
+                    <span>${item.name}</span>
+                    <span>${item.score}/${item.total}</span>
+                </div>
+                <div class="history-sub">
+                    <span>${item.date} at ${item.time}</span>
+                    <span>${item.percent}%</span>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    function clearHistory() {
+        if(confirm("Delete all records?")) {
+            localStorage.removeItem('mc_history');
+            displayHistory();
+        }
+    }
+</script>
+</body>
+</html>
